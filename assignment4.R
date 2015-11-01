@@ -1,4 +1,5 @@
 
+
 library(dplyr)
 library(nnet)
 library(caret)
@@ -50,6 +51,8 @@ data <- data[, -7]
 ######################################################################
 ## Check which are the indices when user changes
 #user.indexes <- which(data$user != lag(data$user))
+## input data
+
 act.indexes <- which(data$activity != lag(data$activity))
 ## Add the firt onbservation index
 act.indexes <- c(1,  act.indexes)
@@ -58,7 +61,14 @@ act.indexes <- c(1,  act.indexes)
 w.data <-data.frame()
 act <- data.frame()
 
-w.size = 100 ## window size
+w.size = 200 ## window size
+## widowed dataset
+w.file.name <- paste("w_data_window_", w.size, ".RDS", sep="")
+## A data set
+a.file.name <- paste("a_data_window_", w.size, ".RDS", sep="")
+## B data set
+b.file.name <- paste("b_data_window_", w.size, ".RDS", sep="")
+
 end = nrow(data) ## end of file
 
 ## Create the new vectors using w.size observations
@@ -103,27 +113,132 @@ close(pb) ## close progress bar
 w.data <- cbind(act,w.data)
 colnames(w.data) <- c("activity",paste("xaccel", 1:w.size, sep=""), paste("yaccel", 1:w.size, sep=""), paste("zaccel", 1:w.size, sep=""))
 
-#saveRDS(w.data, file = "w_data_window_100.RDS")
+saveRDS(w.data, file = w.file.name)
 #write.csv(w.data, file = "w_data_window_100.csv")
+
+
 ################################################################################
 ## Split the windowed data into a and b datasets for 2-fold cross validation.
-nrow(w.data) /2
-#[1] 14777
-## By looking at the data, to avoid split the same activity, we can split
-## the data at row 14764 (last observation with the activity)
-#a.data <- w.data[1:14764,]
-#b.data <- w.data[14765:29554,]
-# saveRDS(a.data, file = "a_data_window_100.RDS")
-# saveRDS(b.data, file = "b_data_window_100.RDS")
-a.data <- readRDS(file = "a_data_window_100.RDS")
-b.data <- readRDS(file = "b_data_window_100.RDS")
+nrow(w.data) / 2
+#[1] 7322.5
 
- ## Check the distribution of activity
+## Let's check where activities change near to the middle of the dataset
+act.indexex.new <- which(w.data$activity != lag(w.data$activity))
+## By looking at the result the closest change is at 7323 so 7322 is chosen as the
+## last observation of the activity for a dataset.
+
+a.data <- w.data[1:7322,]
+b.data <- w.data[7323:nrow(w.data),]
+#saveRDS(a.data, file = a.file.name)
+#saveRDS(b.data, file = b.file.name)
+#a.data <- readRDS(file = "a_data_window_100.RDS")
+#b.data <- readRDS(file = "b_data_window_100.RDS")
+
+## Check the distribution of activity
 table(a.data$activity)
 table(b.data$activity)
- 
+
+################################################################################
+## Using fourier transform
+## Load the data sets with window = 100
+a.data <- readRDS(file = "a_data_window_100.RDS")
+b.data <- readRDS(file = "b_data_window_100.RDS")
+# w.size = 100 # just tell which window size was used so it gives the col names.
+# ## Transform a data
+# #fft.x <- apply(a.data[,2:101], 2, fft)
+# #fft.y <- apply(a.data[,102:201], 2, fft)
+# #fft.z <- apply(a.data[,202:301], 2, fft)
+# a.data[,2:101] <- apply(a.data[,2:101], 1, fft)
+# a.data[,102:201] <- apply(a.data[,102:201], 1, fft)
+# a.data[,202:301] <- apply(a.data[,202:301], 1, fft)
+# ## Calculate the absolute values
+# a.data[,2:101] <- apply(a.data[,2:101], 1, abs)
+# a.data[,102:201] <- apply(a.data[,102:201], 1, abs)
+# a.data[,202:301] <- apply(a.data[,202:301], 1, abs)
+
+## Apply the Fourier transform and get the absolute values for a data set.
+pb <- txtProgressBar(min = 0, max = nrow(a.data), style = 3) ## progress bar
+for (i in 1:nrow(a.data)){
+        a.data[i, 2:101] <- fft(as.numeric(a.data[i, 2:101]))
+        a.data[i, 102:201] <- fft(as.numeric(a.data[i, 102:201]))
+        a.data[i, 202:301] <- fft(as.numeric(a.data[i, 202:301]))
+        
+        a.data[i, 2:101] <- abs(as.numeric(a.data[i, 2:101]))
+        a.data[i, 102:201] <- abs(as.numeric(a.data[i, 102:201]))
+        a.data[i, 202:301] <- abs(as.numeric(a.data[i, 202:301]))
+        
+        setTxtProgressBar(pb, i)
+}
+close(pb) ## close progress bar
+saveRDS(a.data, file = "a_data_window_100_fft_abs.RDS")
+
+## Apply the Fourier transform and get the absolute values for b data set.
+pb <- txtProgressBar(min = 0, max = nrow(b.data), style = 3) ## progress bar
+for (i in 1:nrow(b.data)){
+        b.data[i, 2:101] <- fft(as.numeric(b.data[i, 2:101]))
+        b.data[i, 102:201] <- fft(as.numeric(b.data[i, 102:201]))
+        b.data[i, 202:301] <- fft(as.numeric(b.data[i, 202:301]))
+        
+        b.data[i, 2:101] <- abs(as.numeric(b.data[i, 2:101]))
+        b.data[i, 102:201] <- abs(as.numeric(b.data[i, 102:201]))
+        b.data[i, 202:301] <- abs(as.numeric(b.data[i, 202:301]))
+        
+        setTxtProgressBar(pb, i)
+}
+close(pb) ## close progress bar
+saveRDS(b.data, file = "b_data_window_100_fft_abs.RDS")
+#####
+# 
+# a.data[,2:101] <- apply(a.data[1,2:101], 1, fft)
+# a.data[,102:201] <- apply(a.data[,102:201], 1, fft)
+# a.data[,202:301] <- apply(a.data[,202:301], 1, fft)
+
+# ## Calculate the conjugate
+# a.data[,2:101] <- apply(a.data[,2:101], 2, Conj)
+# a.data[,102:201] <- apply(a.data[,102:201], 2, Conj)
+# a.data[,202:301] <- apply(a.data[,202:301], 2, Conj)
+# 
+# ## Calculate the magnitude
+# a.data[,2:101] <- apply(a.data[,2:101], 2, Mod)
+# a.data[,102:201] <- apply(a.data[,102:201], 2, Mod)
+# a.data[,202:301] <- apply(a.data[,202:301], 2, Mod)
+
+
+## Combine the transformed x, y and z into a unique data frame
+#fft.a.data <- cbind(a.data$activity, as.numeric(fft.x), as.numeric(fft.y), as.numeric(fft.z))
+#fft.a.data <- as.data.frame(fft.a.data, stringAsFactor = FALSE)
+#colnames(fft.a.data) <- c("activity",paste("xaccel", 1:w.size, sep=""), paste("yaccel", 1:w.size, sep=""), paste("zaccel", 1:w.size, sep=""))
+#saveRDS(a.data, file = "fft_a_data_window_100.RDS")
+
+# ## Transform b data
+# #fft.x <- apply(b.data[,2:101], 2, fft)
+# #fft.y <- apply(b.data[,102:201], 2, fft)
+# #fft.z <- apply(b.data[,202:301], 2, fft)
+# b.data[,2:101] <- apply(b.data[,2:101], 1, fft)
+# b.data[,102:201] <- apply(b.data[,102:201], 1, fft)
+# b.data[,202:301] <- apply(b.data[,202:301], 1, fft)
+# ## Combine the transformed x, y and z into a unique data frame
+# #fft.b.data <- cbind(b.data$activity, fft.x, fft.y, fft.z)
+# #fft.b.data <- as.data.frame(fft.b.data)
+# #colnames(fft.b.data) <- c("activity",paste("xaccel", 1:w.size, sep=""), paste("yaccel", 1:w.size, sep=""), paste("zaccel", 1:w.size, sep=""))
+# 
+# ## Calculate the absolute values
+# b.data[,2:101] <- apply(b.data[,2:101], 2, abs)
+# b.data[,102:201] <- apply(b.data[,102:201], 2, abs)
+# b.data[,202:301] <- apply(b.data[,202:301], 2, abs)
+
+#saveRDS(b.data, file = "fft_b_data_window_100.RDS")
+
 ################################################################################
 ## Using Random Forest
+
+## Load the windowed data 
+#a.data <- readRDS(file = "fft_a_data_window_100.RDS")
+#b.data <- readRDS(file = "fft_b_data_window_100.RDS")
+
+## Load the windowed data Fourier transformed data
+a.data <- readRDS(file = "a_data_window_100_fft_abs.RDS")
+b.data <- readRDS(file = "b_data_window_100_fft_abs.RDS")
 
 ## Define the number of trees in the random forest
 nbr.tree = 51
@@ -220,67 +335,5 @@ svm.b.model
 svm.a.predicted <- predict(svm.b.model, a.data)
 svm.a.confm <- confusionMatrix(svm.a.predicted, a.data$activity)
 svm.a.confm
-
-#
-################################################################################
-## Using fourier transform
-fft.a.data <- fft(as.numeric(a.data[1,2:101]))
-
-fft.x <- apply(a.data[,2:101], 2, fft)
-fft.y <- apply(a.data[,102:201], 2, fft)
-fft.z <- apply(a.data[,202:301], 2, fft)
-
-fft.a.data <- cbind(a.data$activity, fft.x, fft.y, fft.z)
-fft.a.data <- as.data.frame(fft.a.data)
-#
-
-###############################################################################
-## Using Random Forest
-
-## Define the number of trees in the random forest
-nbr.tree = 51
-
-## Train using fft.a.data
-system.time(rf.a.model <- randomForest(as.factor(activity) ~ ., data = fft.a.data, importance = TRUE, ntree = nbr.tree))
-#saveRDS(rf.a.model, file = "rf_model_a_data_window_100.RDS")
-rf.a.model
-#varImp(rf.a.model)
-#varImpPlot(rf.a.model)
-
-## Report the confusion matrix for b.data
-rf.b.predicted <- predict(rf.a.model, b.data)
-rf.b.confm <- confusionMatrix(rf.b.predicted, b.data$activity)
-rf.b.confm
-
-## Train using b.data
-system.time(rf.b.model <- randomForest(as.factor(activity) ~ ., data = b.data, importance = TRUE, ntree = nbr.tree))
-#saveRDS(rf.b.model, file = "rf_model_b_data_window_100.RDS")
-rf.b.model
-#varImp(rf.b.model)
-#varImpPlot(rf.b.model)
-
-## Report the confusion matrix for fft.a.data
-rf.a.predicted <- predict(rf.b.model, fft.a.data)
-rf.a.confm <- confusionMatrix(rf.a.predicted, fft.a.data$activity)
-rf.a.confm
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-##plot(fft.a.data)
 
 #
